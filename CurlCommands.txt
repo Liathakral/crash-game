@@ -1,0 +1,31 @@
+2️⃣ cURL Commands for All Endpoints
+Create User
+
+curl -X POST http://localhost:2000/api/wallet/create \
+-H "Content-Type: application/json" \
+-d '{"username": "player1"}'
+Deposit Funds
+
+curl -X POST http://localhost:2000/api/wallet/deposit \
+-H "Content-Type: application/json" \
+-d '{"userId": "PUT_USER_ID", "usdAmount": 500, "currency": "BTC"}'
+Get Wallet Balance
+
+curl http://localhost:2000/api/wallet/PUT_USER_ID
+Get Crypto Prices
+
+curl http://localhost:2000/api/crypto/prices
+Place Bet
+
+
+curl -X POST http://localhost:2000/api/bet \
+-H "Content-Type: application/json" \
+-d '{"userId": "PUT_USER_ID", "usdAmount": 10, "currency": "BTC"}'
+Cashout
+
+curl -X POST http://localhost:2000/api/cashout \
+-H "Content-Type: application/json" \
+-d '{"userId": "PUT_USER_ID"}'
+Get Transaction History
+
+curl http://localhost:2000/api/transactions/PUT_USER_ID
