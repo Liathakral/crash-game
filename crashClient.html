@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Crypto Crash WebSocket Client</title>
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+      background-color: #1a1a2e;
+      color: #e0e0e0;
+      margin: 20px;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1, h3 {
+      color: #0f4c75;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+    }
+    div {
+      background-color: #2e2e4a;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      margin-bottom: 20px;
+      width: 90%;
+      max-width: 600px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+    }
+    label {
+      margin-right: 5px;
+      font-weight: bold;
+    }
+    input[type="number"], select {
+      padding: 8px;
+      border-radius: 5px;
+      border: 1px solid #0f4c75;
+      background-color: #3a3a5e;
+      color: #e0e0e0;
+      width: 100px; 
+    }
+    button {
+      background-color: #0f4c75;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s ease, transform 0.2s ease;
+    }
+    button:hover {
+      background-color: #3282b8;
+      transform: translateY(-2px);
+    }
+    hr {
+      border: 0;
+      height: 1px;
+      background-image: linear-gradient(to right, rgba(0, 0, 0, 0), #0f4c75, rgba(0, 0, 0, 0));
+      width: 90%;
+      max-width: 600px;
+      margin: 20px 0;
+    }
+    pre {
+      background-color: #16213e;
+      border: 1px solid #0f4c75;
+      padding: 15px;
+      border-radius: 8px;
+      width: 90%;
+      max-width: 600px;
+      height: 400px;
+      overflow-y: scroll;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      font-family: monospace;
+      font-size: 14px;
+      color: #c0c0c0;
+      box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <h1>Crypto Crash Test Client</h1>
+  <p>Connected as: <span id="userId">N/A</span></p>
+
+  <div>
+    <label for="usdAmount">USD Bet Amount: </label>
+    <input type="number" id="usdAmount" value="10">
+    <label for="currency">Currency:</label>
+    <select id="currency">
+      <option value="BTC">BTC</option>
+      <option value="ETH">ETH</option>
+    </select>
+    <button onclick="placeBet()">Place Bet</button>
+    <button onclick="cashout()">Cash Out</button>
+  </div>
+
+  <hr>
+  <h3>Game Log</h3>
+  <pre id="log"></pre>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const logEl = document.getElementById("log");
+    const log = (msg) => {
+      logEl.textContent += msg + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    };
+
+  
+    const backendUrl = "http://localhost:2000"; 
+
+    const socket = io(backendUrl);
+
+    let userId = localStorage.getItem('cryptoCrashUserId');
+    if (!userId) {
+      userId = prompt("Enter your User ID:");
+      if (userId) {
+        localStorage.setItem('cryptoCrashUserId', userId);
+      } else {
+        log("User ID not provided. Some functions may not work.");
+      }
+    }
+    document.getElementById("userId").textContent = userId || "Guest";
+
+    let multiplierLogCounter = 0; 
+
+    socket.on("connect", () => {
+      log(`✅ Connected to server as ${socket.id}`);
+    });
+
+    socket.on("round_start", (data) => {
+      log(`--- NEW ROUND ---`);
+      log(`🚀 Round ${data.roundNumber} started!`);
+      multiplierLogCounter = 0; 
+    });
+
+    socket.on("multiplier_update", (data) => {
+      multiplierLogCounter++;
+      if (multiplierLogCounter % 5 === 0) {
+        log(`📈 Multiplier: ${data.multiplier}x`);
+      }
+    });
+
+    socket.on("new_bet", (data) => {
+      log(`🎯 New bet: User ${data.userId.substring(0, 8)}... bet $${data.usdAmount} in ${data.currency}`);
+    });
+
+    socket.on("cashout_event", (data) => {
+      log(`💰 User ${data.userId.substring(0, 8)}... cashed out at ${data.multiplier}x for $${data.payoutUsd.toFixed(2)} ${data.currency}`);
+    });
+
+    socket.on("round_end", (data) => {
+      log(`💥 Round ${data.roundNumber} crashed at ${data.crashPoint}x`);
+      log(`--- ROUND ENDED ---`);
+    });
+
+    // Client-side feedback for bet/cashout success/error
+    socket.on("bet_success_feedback", (data) => {
+        log(`✅ Your bet placed: ${JSON.stringify(data)}`);
+    });
+    socket.on("bet_error_feedback", (err) => {
+        log(`❌ Your bet failed: ${err.error}`);
+    });
+    socket.on("cashout_success_feedback", (data) => {
+        log(`✅ You cashed out: ${JSON.stringify(data)}`);
+    });
+    socket.on("cashout_error_feedback", (err) => {
+        log(`❌ Cashout failed: ${err.error}`);
+    });
+
+
+    function placeBet() {
+      const usdAmount = parseFloat(document.getElementById("usdAmount").value);
+      const currency = document.getElementById("currency").value;
+      if (!userId) {
+        log("Error: User ID not set. Please refresh and enter your ID.");
+        return;
+      }
+
+      fetch(`${backendUrl}/api/bet`, { // Use backendUrl variable
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, usdAmount, currency })
+      })
+      .then(res => res.json())
+      .then(data => {
+        
+        if (!data.success) {
+            log(`❌ Bet failed (API): ${data.error}`);
+        }
+      })
+      .catch(error => {
+        log(`❌ Network error placing bet: ${error.message}`);
+      });
+    }
+
+    function cashout() {
+      if (!userId) {
+        log("Error: User ID not set. Please refresh and enter your ID.");
+        return;
+      }
+     
+      fetch(`${backendUrl}/api/cashout`, { // Use backendUrl variable
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId })
+      })
+      .then(res => res.json())
+      .then(data => {
+      
+        if (!data.success) {
+            log(`❌ Cashout failed (API): ${data.error}`);
+        }
+      })
+      .catch(error => {
+        log(`❌ Network error cashing out: ${error.message}`);
+      });
+    }
+  </script>
+</body>
+</html>
